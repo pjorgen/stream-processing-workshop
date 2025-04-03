@@ -9,6 +9,7 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.StreamsBuilder;
+import org.apache.kafka.streams.kstream.*;
 import org.apache.kafka.streams.kstream.Consumed;
 import org.apache.kafka.streams.kstream.Materialized;
 import org.apache.kafka.streams.kstream.Produced;
@@ -30,20 +31,27 @@ import static org.improving.workshop.Streams.*;
 @Slf4j
 public class TopSellingGenreByVenue {
     // Reference TOPIC_DATA_DEMO_* properties in Streams
-    public static final String INPUT_TOPIC = "data-demo-{entity}";
-    // MUST BE PREFIXED WITH "kafka-workshop-"
-    public static final String OUTPUT_TOPIC = "kafka-workshop-{unique-topic-name}";
+    public static final String ARTIST_INPUT_TOPIC = TOPIC_DATA_DEMO_ARTISTS;
+    public static final String EVENT_INPUT_TOPIC = TOPIC_DATA_DEMO_EVENTS;
+    public static final String TICKET_INPUT_TOPIC = TOPIC_DATA_DEMO_TICKETS;
 
+    // MUST BE PREFIXED WITH "kafka-workshop-"
+    public static final String ARTIST_KTABLE = "kafka-workshop-artist-ktable";
+    public static final String EVENT_ARTIST_KTABLE = "kafka-workshop-event-artist-ktable";
+    public static final String OUTPUT_TOPIC = "kafka-workshop-top-selling-genre-by-venue";
+
+    // Set up SERDES
+    public static final JsonSerde<EventArtist> EVENT_ARTIST_JSON_SERDE = new JsonSerde<>(EventArtist.class);
     public static final JsonSerde<SortedCounterMap> COUNTER_MAP_JSON_SERDE = new JsonSerde<>(SortedCounterMap.class);
 
     // Jackson is converting Value into Integer Not Long due to erasure,
     //public static final JsonSerde<LinkedHashMap<String, Long>> LINKED_HASH_MAP_JSON_SERDE = new JsonSerde<>(LinkedHashMap.class);
     public static final JsonSerde<LinkedHashMap<String, Long>> LINKED_HASH_MAP_JSON_SERDE
-            = new JsonSerde<>(
-            new TypeReference<LinkedHashMap<String, Long>>() {
-            },
-            new ObjectMapper()
-                    .configure(DeserializationFeature.USE_LONG_FOR_INTS, true)
+        = new JsonSerde<>(
+        new TypeReference<LinkedHashMap<String, Long>>() {
+        },
+        new ObjectMapper()
+            .configure(DeserializationFeature.USE_LONG_FOR_INTS, true)
     );
 
     /**
@@ -60,14 +68,111 @@ public class TopSellingGenreByVenue {
     }
 
     static void configureTopology(final StreamsBuilder builder) {
+        // Store artists in a table so we can join then to events
+        KTable<String, Artist> artistsTable = builder
+            .table(
+                ARTIST_INPUT_TOPIC,
+                Materialized
+                    .<String, Artist>as(persistentKeyValueStore(ARTIST_KTABLE))
+                    .withKeySerde(Serdes.String())
+                    .withValueSerde(SERDE_ARTIST_JSON)
+            );
+        // Capture the backside of the table to log a confirmation that the Artist was received
+        artistsTable.toStream().peek((key, artist) -> log.info("Artist '{}' registered with value '{}'", key, artist));
+
+        // Get the event stream, rekey by artistid, and join to the artistsTable
+        KTable<String, EventArtist> eventArtistKTable = builder
+            .stream(EVENT_INPUT_TOPIC, Consumed.with(Serdes.String(), SERDE_EVENT_JSON))
+            .peek((eventId, event)
+                -> log.info("Event '{}' registered with value '{}'", eventId, event))
+
+            // Rekey by artistid and mark for repartition
+            .selectKey((eventId, event) -> event.artistid(), Named.as("rekey-event-by-artistid"))
+
+            // Join to the artist KTable. Causes a repartition
+            .join(
+                artistsTable, // Join to table
+                (event, artist) // Left value, right value
+                    -> new EventArtist(event, artist) // ValueJoiner
+            )
+
+            // Log the join
+            .peek((key, value)
+                -> log.info("EventArtist with eventId '{}' and artistId '{}' registered",
+                value.event.id(), value.artist.id()))
+
+            // Rekey again by eventid and mark for repartition
+            .selectKey((key, eventArtist)
+                -> eventArtist.event.id(), Named.as("rekey-event-artist-by-eventid"))
+
+            // Save it to a KTable. Causes a repartition
+            .toTable(
+                Materialized
+                    .<String, EventArtist>as(persistentKeyValueStore(EVENT_ARTIST_KTABLE))
+                    .withKeySerde(Serdes.String())
+                    .withValueSerde(EVENT_ARTIST_JSON_SERDE)
+            );
+
+        // Get the Tickets stream, rekey by eventid, and join to the EventArtistsTable
         builder
-            .stream(INPUT_TOPIC, Consumed.with(Serdes.String(), Serdes.String()))
-            .peek((key, value) -> log.info("Event Received: {},{}", key, value))
+            .stream(TICKET_INPUT_TOPIC, Consumed.with(Serdes.String(), SERDE_TICKET_JSON))
+            .peek((ticketId, ticket) -> log.info("Ticket '{}' registered with value '{}'", ticketId, ticket))
 
-            // add topology here
+            // Rekey by eventid and mark for repartition
+            .selectKey((ticketId, ticket) -> ticket.eventid(), Named.as("rekey-ticket-by-eventid"))
 
-            // NOTE: when using ccloud, the topic must exist or 'auto.create.topics.enable' set to true (dedicated cluster required)
-            .to(OUTPUT_TOPIC, Produced.with(Serdes.String(), Serdes.String()));
+            // Join to EventArtist. Causes a repartition
+            .join(
+                eventArtistKTable, // Join to table
+                (ticket, eventArtist) // Left value, right value
+                    -> new EnrichedTicket(ticket, eventArtist.event, eventArtist.artist) // ValueJoiner
+            )
+
+            // Rekey and repartition by event.venueid
+            .groupBy((eventId, enrichedTicket) -> enrichedTicket.event.venueid())
+
+            // Aggregate to order genre count by venue using a SortedCounterMap
+            .aggregate(
+                // Initializer
+                SortedCounterMap::new,
+
+                // Aggregator
+                (venueId, enrichedTicket, venueGenreCounts) -> {
+                    venueGenreCounts.incrementCount(enrichedTicket.artist.genre());
+                    return venueGenreCounts;
+                },
+
+                // Save the mappings to a KTable
+                Materialized
+                    .<String, SortedCounterMap>as(persistentKeyValueStore("venue-genre-ticket-counts"))
+                    .withKeySerde(Serdes.String())
+                    .withValueSerde(COUNTER_MAP_JSON_SERDE)
+                )
+
+            // Turn it back into a stream to produce it to the output topic
+            .toStream()
+
+            // Trim to only the top 3
+            .mapValues(sortedCounterMap -> sortedCounterMap.top(3))
+            .peek((key, counterMap) -> log.info("Venue {}'s 3 Top Selling Genres: {}", key, counterMap))
+
+            // Output to the output topic
+            .to(OUTPUT_TOPIC, Produced.with(Serdes.String(), LINKED_HASH_MAP_JSON_SERDE));
+    }
+
+    @Data
+    @AllArgsConstructor
+    public static class EventArtist {
+        public Event event;
+        public Artist artist;
+    }
+
+    @Data
+    @AllArgsConstructor
+    public static class EnrichedTicket {
+        public Ticket ticket;
+        public Event event;
+        public Artist artist;
     }
 
 }
