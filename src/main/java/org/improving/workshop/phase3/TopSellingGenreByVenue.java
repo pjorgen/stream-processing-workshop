@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.StreamsBuilder;
@@ -42,6 +43,7 @@ public class TopSellingGenreByVenue {
 
     // Set up SERDES
     public static final JsonSerde<EventArtist> EVENT_ARTIST_JSON_SERDE = new JsonSerde<>(EventArtist.class);
+    public static final JsonSerde<EnrichedTicket> ENRICHED_TICKET_JSON_SERDE = new JsonSerde<>(EnrichedTicket.class);
     public static final JsonSerde<SortedCounterMap> COUNTER_MAP_JSON_SERDE = new JsonSerde<>(SortedCounterMap.class);
 
     // Jackson is converting Value into Integer Not Long due to erasure,
@@ -77,8 +79,13 @@ public class TopSellingGenreByVenue {
                     .withKeySerde(Serdes.String())
                     .withValueSerde(SERDE_ARTIST_JSON)
             );
+
         // Capture the backside of the table to log a confirmation that the Artist was received
-        artistsTable.toStream().peek((key, artist) -> log.info("Artist '{}' registered with value '{}'", key, artist));
+        // Publish it to a stream for testing as well
+        artistsTable
+            .toStream()
+            .peek((key, artist) -> log.info("Artist '{}' registered with value '{}'", key, artist))
+            .to(ARTIST_KTABLE, Produced.with(Serdes.String(), SERDE_ARTIST_JSON));
 
         // Get the event stream, rekey by artistid, and join to the artistsTable
         KTable<String, EventArtist> eventArtistKTable = builder
@@ -98,8 +105,8 @@ public class TopSellingGenreByVenue {
 
             // Log the join
             .peek((key, value)
-                -> log.info("EventArtist with eventId '{}' and artistId '{}' registered",
-                value.event.id(), value.artist.id()))
+                -> log.info("EventArtist with eventId '{}' and artistId '{}' registered with value '{}'",
+                value.event.id(), value.artist.id(), value))
 
             // Rekey again by eventid and mark for repartition
             .selectKey((key, eventArtist)
@@ -113,6 +120,14 @@ public class TopSellingGenreByVenue {
                     .withValueSerde(EVENT_ARTIST_JSON_SERDE)
             );
 
+        // Capture the backside of the table to log a confirmation that the Artist was received
+        // Publish it to a stream for testing as well
+        eventArtistKTable
+            .toStream()
+            .peek((key, eventArtist) -> log.info("EventArtist '{}' registered with value '{}'", key, eventArtist))
+            .to(EVENT_ARTIST_KTABLE, Produced.with(Serdes.String(),EVENT_ARTIST_JSON_SERDE));
+
+
         // Get the Tickets stream, rekey by eventid, and join to the EventArtistsTable
         builder
             .stream(TICKET_INPUT_TOPIC, Consumed.with(Serdes.String(), SERDE_TICKET_JSON))
@@ -120,6 +135,7 @@ public class TopSellingGenreByVenue {
 
             // Rekey by eventid and mark for repartition
             .selectKey((ticketId, ticket) -> ticket.eventid(), Named.as("rekey-ticket-by-eventid"))
+            .peek((eventId, ticket) -> log.info("Ticket with eventId '{}' registered with value '{}'", eventId, ticket))
 
             // Join to EventArtist. Causes a repartition
             .join(
@@ -127,9 +143,13 @@ public class TopSellingGenreByVenue {
                 (ticket, eventArtist) // Left value, right value
                     -> new EnrichedTicket(ticket, eventArtist.event, eventArtist.artist) // ValueJoiner
             )
+            .peek((eventId, enrichedTicket) -> log.info("Enriched ticket joined with id '{}' and value '{}'", eventId, enrichedTicket))
 
             // Rekey and repartition by event.venueid
-            .groupBy((eventId, enrichedTicket) -> enrichedTicket.event.venueid())
+            .groupBy(
+                (eventId, enrichedTicket) -> enrichedTicket.event.venueid(),
+                Grouped.with(Serdes.String(), ENRICHED_TICKET_JSON_SERDE)
+            )
 
             // Aggregate to order genre count by venue using a SortedCounterMap
             .aggregate(
@@ -151,6 +171,7 @@ public class TopSellingGenreByVenue {
 
             // Turn it back into a stream to produce it to the output topic
             .toStream()
+            .peek((venueId, sortedCounterMap) -> log.info("Aggregate sorted counter map created with venueId '{}' and value '{}'", venueId, sortedCounterMap))
 
             // Trim to only the top 3
             .mapValues(sortedCounterMap -> sortedCounterMap.top(3))
@@ -161,6 +182,7 @@ public class TopSellingGenreByVenue {
     }
 
     @Data
+    @NoArgsConstructor
     @AllArgsConstructor
     public static class EventArtist {
         public Event event;
@@ -168,6 +190,7 @@ public class TopSellingGenreByVenue {
     }
 
     @Data
+    @NoArgsConstructor
     @AllArgsConstructor
     public static class EnrichedTicket {
         public Ticket ticket;
