@@ -1,6 +1,5 @@
 package org.improving.workshop.phase3;
 
-import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -22,10 +21,7 @@ import org.msse.demo.mockdata.music.event.Event;
 import org.msse.demo.mockdata.music.artist.Artist;
 
 import java.util.LinkedHashMap;
-import java.util.Map;
 
-import static java.util.Collections.reverseOrder;
-import static java.util.stream.Collectors.toMap;
 import static org.apache.kafka.streams.state.Stores.persistentKeyValueStore;
 import static org.improving.workshop.Streams.*;
 
@@ -50,7 +46,7 @@ public class TopSellingGenreByVenue {
     //public static final JsonSerde<LinkedHashMap<String, Long>> LINKED_HASH_MAP_JSON_SERDE = new JsonSerde<>(LinkedHashMap.class);
     public static final JsonSerde<LinkedHashMap<String, Long>> LINKED_HASH_MAP_JSON_SERDE
         = new JsonSerde<>(
-        new TypeReference<LinkedHashMap<String, Long>>() {
+        new TypeReference<>() {
         },
         new ObjectMapper()
             .configure(DeserializationFeature.USE_LONG_FOR_INTS, true)
@@ -88,6 +84,7 @@ public class TopSellingGenreByVenue {
             .to(ARTIST_KTABLE, Produced.with(Serdes.String(), SERDE_ARTIST_JSON));
 
         // Get the event stream, rekey by artistid, and join to the artistsTable
+        // Left value, right value
         KTable<String, EventArtist> eventArtistKTable = builder
             .stream(EVENT_INPUT_TOPIC, Consumed.with(Serdes.String(), SERDE_EVENT_JSON))
             .peek((eventId, event)
@@ -99,8 +96,7 @@ public class TopSellingGenreByVenue {
             // Join to the artist KTable. Causes a repartition
             .join(
                 artistsTable, // Join to table
-                (event, artist) // Left value, right value
-                    -> new EventArtist(event, artist) // ValueJoiner
+                    EventArtist::new // ValueJoiner
             )
 
             // Log the join
