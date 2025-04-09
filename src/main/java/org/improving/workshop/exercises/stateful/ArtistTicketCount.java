@@ -1,14 +1,9 @@
 package org.improving.workshop.exercises.stateful;
 
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.StreamsBuilder;
-import org.apache.kafka.streams.kstream.*;
-import org.improving.workshop.Streams;
-import org.msse.demo.mockdata.music.event.Event;
 
-import static org.apache.kafka.streams.state.Stores.persistentKeyValueStore;
-import static org.improving.workshop.Streams.*;
+import static org.improving.workshop.Streams.startStreams;
 
 /**
  * Goals -
