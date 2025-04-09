@@ -1,31 +1,19 @@
 package org.improving.workshop.phase3;
 
-import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.AllArgsConstructor;
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.kstream.Consumed;
-import org.apache.kafka.streams.kstream.Materialized;
 import org.apache.kafka.streams.kstream.Produced;
+import org.improving.workshop.samples.TopCustomerArtists.SortedCounterMap;
 import org.springframework.kafka.support.serializer.JsonSerde;
 
-import org.improving.workshop.samples.TopCustomerArtists.SortedCounterMap;
-import org.msse.demo.mockdata.music.ticket.Ticket;
-import org.msse.demo.mockdata.music.event.Event;
-import org.msse.demo.mockdata.music.artist.Artist;
-
 import java.util.LinkedHashMap;
-import java.util.Map;
 
-import static java.util.Collections.reverseOrder;
-import static java.util.stream.Collectors.toMap;
-import static org.apache.kafka.streams.state.Stores.persistentKeyValueStore;
-import static org.improving.workshop.Streams.*;
+import static org.improving.workshop.Streams.startStreams;
 
 @Slf4j
 public class TopSellingGenreByVenue {
@@ -61,13 +49,13 @@ public class TopSellingGenreByVenue {
 
     static void configureTopology(final StreamsBuilder builder) {
         builder
-            .stream(INPUT_TOPIC, Consumed.with(Serdes.String(), Serdes.String()))
-            .peek((key, value) -> log.info("Event Received: {},{}", key, value))
+                .stream(INPUT_TOPIC, Consumed.with(Serdes.String(), Serdes.String()))
+                .peek((key, value) -> log.info("Event Received: {},{}", key, value))
 
-            // add topology here
+                // add topology here
 
-            // NOTE: when using ccloud, the topic must exist or 'auto.create.topics.enable' set to true (dedicated cluster required)
-            .to(OUTPUT_TOPIC, Produced.with(Serdes.String(), Serdes.String()));
+                // NOTE: when using ccloud, the topic must exist or 'auto.create.topics.enable' set to true (dedicated cluster required)
+                .to(OUTPUT_TOPIC, Produced.with(Serdes.String(), Serdes.String()));
     }
 
 }

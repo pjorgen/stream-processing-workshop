@@ -61,7 +61,7 @@ public class TopCustomerArtistsTest {
   }
 
   @Test
-  @DisplayName("customer top streamed artists")
+  @DisplayName("=================================customer top streamed artists")
   void customerTopStreamedArtists() {
     //multiple customer streams received by the topology
     inputTopic.pipeInput(UUID.randomUUID().toString(), STREAMS.generate("1", "2"));
