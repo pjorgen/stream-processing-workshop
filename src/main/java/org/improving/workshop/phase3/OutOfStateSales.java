@@ -163,6 +163,10 @@ public class OutOfStateSales {
 
                 //Aggregate customer with out of state ticket sales
                 (String venueId, TicketWithCustomerAndVenueAndState ticketWithCustomerAndVenueAndState, OutOfStateTicketSales outOfStateTicketSales) -> {
+                    if (!outOfStateTicketSales.initialized) {
+                        outOfStateTicketSales.initialize(ticketWithCustomerAndVenueAndState.venueWithState.venue);
+                    }
+                    
                     String venueState = ticketWithCustomerAndVenueAndState.venueWithState.address.state();
                     String customerState = ticketWithCustomerAndVenueAndState.ticketWithCustomerAndVenue.ticketWithCustomerAddress.address.state();
                     if (!venueState.equals(customerState)) {
@@ -236,6 +240,10 @@ public class OutOfStateSales {
 
         public void incrementOutOfStateSale() {
             this.outOfStateTicket++;
+        }
+
+        public double getOutOfStateTicket() {
+            return outOfStateTicket;
         }
     }
 }
