@@ -9,11 +9,13 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.serialization.Serdes;
+import org.apache.kafka.common.utils.Bytes;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.kstream.Consumed;
 import org.apache.kafka.streams.kstream.Materialized;
 import org.apache.kafka.streams.kstream.Produced;
 import org.apache.kafka.streams.kstream.*;
+import org.apache.kafka.streams.state.KeyValueStore;
 import org.improving.workshop.samples.PurchaseEventTicket;
 import org.springframework.kafka.support.serializer.JsonSerde;
 
@@ -44,8 +46,9 @@ public class OutOfStateSales {
     // public static final JsonSerde<Event> SERDE_EVENT_JSON = new JsonSerde<>(Event.class);
     // public static final JsonSerde<Venue> SERDE_VENUE_JSON = new JsonSerde<>(Venue.class);
     public static final JsonSerde<TicketWithCustomerAndVenueAndState> TICKET_CUSTOMER_JSON_SERDE = new JsonSerde<>(TicketWithCustomerAndVenueAndState.class);
-
-
+    public static final JsonSerde<TicketWithCustomerAddress> TICKET_WITH_CUSTOMER_ADDRESS_SERDE = new JsonSerde<>(TicketWithCustomerAddress.class);
+    public static final JsonSerde<VenueWithState> VENUE_WITH_STATE_SERDE = new JsonSerde<>(VenueWithState.class);
+    public static final JsonSerde<TicketWithCustomerAndVenue> TICKET_WITH_CUSTOMER_AND_VENUE_SERDE = new JsonSerde<>(TicketWithCustomerAndVenue.class);
     // MUST BE PREFIXED WITH "kafka-workshop-"
     public static final String OUTPUT_TOPIC = "kafka-workshop-out-of-state-sales-ratio";
 
@@ -116,12 +119,14 @@ public class OutOfStateSales {
                         VenueWithState::new)
                 .peek((addressId, venueWithState) -> log.info("Address ID: {} with Venue With State: {}", addressId, venueWithState))
                 .<String>selectKey((addressId, venueWithState) -> venueWithState.venue.id(), Named.as("rekey-by-venueid"))
-                        .toTable(Materialized.as("venue-with-state-table"));
+                .toTable(Materialized.<String, VenueWithState, KeyValueStore<Bytes, byte[]>>as("venue-with-state-table")
+                .withValueSerde(VENUE_WITH_STATE_SERDE));
 
         KTable<String, Address> customerAddressTable = addressTable
                 .toStream()
                 .<String>selectKey((addressId, address) -> address.customerid(), Named.as("rekey-by-customerid-from-address-table"))
-                .toTable(Materialized.as("customer-address-table"));
+                .toTable(Materialized.<String, Address, KeyValueStore<Bytes, byte[]>>as("customer-address-table")
+                .withValueSerde(SERDE_ADDRESS_JSON));
         
         builder
             .stream(INPUT_TOPIC_TICKET, Consumed.with(Serdes.String(), SERDE_TICKET_JSON))
@@ -137,14 +142,18 @@ public class OutOfStateSales {
             .<String>selectKey((customerId, ticketWithCustomerAddress) -> ticketWithCustomerAddress.ticket.eventid(), Named.as("rekey-by-eventid"))
             .<Event, TicketWithCustomerAndVenue>join(
                 eventsTable,
-                (eventId, ticketWithCustomerAddress, event) -> new TicketWithCustomerAndVenue(ticketWithCustomerAddress, event)
+                (eventId, ticketWithCustomerAddress, event) -> 
+                new TicketWithCustomerAndVenue(ticketWithCustomerAddress, event),
+                Joined.<String, TicketWithCustomerAddress, Event>with(Serdes.String(), TICKET_WITH_CUSTOMER_ADDRESS_SERDE, SERDE_EVENT_JSON)
             )
             .peek((customerId, ticketWithCustomerAndVenue) -> log.info("Customer ID: {} with Ticket With Customer And Venue: {}", customerId, ticketWithCustomerAndVenue))
             // rekey by venueid so we can join against the venue-with-state-table
             .<String>selectKey((customerId, ticketWithCustomerAndVenue) -> ticketWithCustomerAndVenue.event.venueid(), Named.as("rekey-by-venueid-for-join"))
             .<VenueWithState, TicketWithCustomerAndVenueAndState>join(
                 venueWithStateTable,
-                (ticketWithCustomerAndVenue, venueWithState) -> new TicketWithCustomerAndVenueAndState(ticketWithCustomerAndVenue, venueWithState)
+                (venueId, ticketWithCustomerAndVenue, venueWithState) -> 
+                new TicketWithCustomerAndVenueAndState(ticketWithCustomerAndVenue, venueWithState),
+                Joined.<String, TicketWithCustomerAndVenue, VenueWithState>with(Serdes.String(), TICKET_WITH_CUSTOMER_AND_VENUE_SERDE, VENUE_WITH_STATE_SERDE)
             )
             .peek((venueId, ticketWithCustomerAndVenueAndState) -> log.info("Ticket With Customer And Venue And State: {}", ticketWithCustomerAndVenueAndState))
             .groupByKey(Grouped.with(Serdes.String(), TICKET_CUSTOMER_JSON_SERDE))
@@ -180,7 +189,7 @@ public class OutOfStateSales {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class TicketWithCustomerAddress {
-        public org.msse.demo.mockdata.music.ticket.Ticket ticket;
+        public Ticket ticket;
         public Address address;
     }
 

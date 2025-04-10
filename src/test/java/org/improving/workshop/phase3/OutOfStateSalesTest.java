@@ -115,7 +115,7 @@ class OutOfStateSalesTest {
             "Minneapolis", "MN", "55414", "1234", "USA", 0.0, 0.0);
         addressInputTopic.pipeInput(addressId2, address2);
 
-        Venue venue = new Venue(venueId, "Test Venue", addressId2, 500);
+        Venue venue = new Venue(venueId, addressId2, "Test Venue", 500);
         venueInputTopic.pipeInput(venueId, venue);
 
         Ticket ticket = DataFaker.TICKETS.generate(customerId, eventId);
