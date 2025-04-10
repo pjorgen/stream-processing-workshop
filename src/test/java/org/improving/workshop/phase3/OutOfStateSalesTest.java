@@ -12,17 +12,21 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+
 import org.msse.demo.mockdata.music.ticket.Ticket;
 import org.msse.demo.mockdata.customer.address.Address;
 import org.msse.demo.mockdata.music.event.Event;
 import org.msse.demo.mockdata.music.venue.Venue;
+import org.msse.demo.mockdata.customer.profile.Customer;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
-import static org.improving.workshop.utils.DataFaker.STREAMS;
+import org.improving.workshop.utils.DataFaker;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import org.improving.workshop.samples.TopCustomerArtists.SortedCounterMap;
+import org.springframework.kafka.support.serializer.JsonSerde;
 
 class OutOfStateSalesTest {
     private TopologyTestDriver driver;
@@ -31,7 +35,8 @@ class OutOfStateSalesTest {
     private TestInputTopic<String, Address> addressInputTopic;
     private TestInputTopic<String, Event> eventInputTopic;
     private TestInputTopic<String, Venue> venueInputTopic;
-    private TestOutputTopic<String, LinkedHashMap<String, Long>> outputTopic;
+    private TestInputTopic<String, Customer> customerInputTopic;
+    private TestOutputTopic<String, SortedCounterMap> outputTopic;
 
     @BeforeEach
     public void setup() {
@@ -42,49 +47,83 @@ class OutOfStateSalesTest {
         driver = new TopologyTestDriver(streamsBuilder.build(), Streams.buildProperties());
 
         ticketInputTopic = driver.createInputTopic(
-                Streams.TOPIC_DATA_DEMO_TICKETS,
+                OutOfStateSales.INPUT_TOPIC_TICKET,
                 Serdes.String().serializer(),
                 Streams.SERDE_TICKET_JSON.serializer()
         );
 
+        customerInputTopic = driver.createInputTopic(
+                Streams.TOPIC_DATA_DEMO_CUSTOMERS,
+                Serdes.String().serializer(),
+                Streams.SERDE_CUSTOMER_JSON.serializer()
+        );
+
         addressInputTopic = driver.createInputTopic(
-                Streams.TOPIC_DATA_DEMO_ADDRESSES,
+                OutOfStateSales.INPUT_TOPIC_ADDRESS,
                 Serdes.String().serializer(),
                 Streams.SERDE_ADDRESS_JSON.serializer()
         );
 
         eventInputTopic = driver.createInputTopic(
-                Streams.TOPIC_DATA_DEMO_EVENTS,
+                OutOfStateSales.INPUT_TOPIC_EVENT,
                 Serdes.String().serializer(),
                 Streams.SERDE_EVENT_JSON.serializer()
         );
 
         venueInputTopic = driver.createInputTopic(
-                Streams.TOPIC_DATA_DEMO_VENUES,
+                OutOfStateSales.INPUT_TOPIC_VENUE,
                 Serdes.String().serializer(),
-                Streams.SERDE_VENUE_JSON.serializer()
+                new JsonSerde<>(Venue.class).serializer()
         );
 
         outputTopic = driver.createOutputTopic(
                 OutOfStateSales.OUTPUT_TOPIC,
                 Serdes.String().deserializer(),
-                OutOfStateSales.LINKED_HASH_MAP_JSON_SERDE.deserializer()
+                OutOfStateSales.COUNTER_MAP_JSON_SERDE.deserializer()
         );
     }
 
     @AfterEach
-    public void cleanup() { driver.close(); }
+    public void cleanup() { 
+        if (driver != null) {
+            driver.close();
+        }
+    }
 
     @Test
-    @DisplayName("top young adult artists by state")
-    public void insertTestHere() {
+    @DisplayName("Out of state sales by venue")
+    public void outOfStateSalesByVenue() {
         // ARRANGE
-
-
+        String eventId = "event-1";
+        String venueId = "venue-1";
+        String customerId = "customer-1";
+        String addressId1 = "address-1";
+        String addressId2 = "address-2";
+        
+        
         // ACT
+        Event event = new Event(eventId, "artist-1", venueId, 5, "today");
+        eventInputTopic.pipeInput(eventId, event);
 
+        Address address1 = new Address(
+            addressId1, customerId, "cd", "HOME", "111 1st St", "Apt 2",
+            "Madison", "WI", "55555", "1234", "USA", 0.0, 0.0);
+        addressInputTopic.pipeInput(addressId1, address1);
+
+        Address address2 = new Address(
+            addressId2, "cust-678", "cd", "BUSINESS", "123 31st St", " ",
+            "Minneapolis", "MN", "55414", "1234", "USA", 0.0, 0.0);
+        addressInputTopic.pipeInput(addressId2, address2);
+
+        Venue venue = new Venue(venueId, "Test Venue", addressId2, 500);
+        venueInputTopic.pipeInput(venueId, venue);
+
+        Ticket ticket = DataFaker.TICKETS.generate(customerId, eventId);
+        ticketInputTopic.pipeInput(UUID.randomUUID().toString(), ticket);
 
         // ASSERT
+        var outputRecords = outputTopic.readRecordsToList();
+        assertEquals(1, outputRecords.size());
 
     }
 }
