@@ -35,8 +35,8 @@ class OutOfStateSalesTest {
     private TestInputTopic<String, Address> addressInputTopic;
     private TestInputTopic<String, Event> eventInputTopic;
     private TestInputTopic<String, Venue> venueInputTopic;
-    private TestInputTopic<String, Customer> customerInputTopic;
-    private TestOutputTopic<String, SortedCounterMap> outputTopic;
+    // private TestInputTopic<String, Customer> customerInputTopic;
+    private TestOutputTopic<String, OutOfStateSales.OutOfStateTicketSales> outputTopic;
 
     @BeforeEach
     public void setup() {
@@ -52,11 +52,11 @@ class OutOfStateSalesTest {
                 Streams.SERDE_TICKET_JSON.serializer()
         );
 
-        customerInputTopic = driver.createInputTopic(
-                Streams.TOPIC_DATA_DEMO_CUSTOMERS,
-                Serdes.String().serializer(),
-                Streams.SERDE_CUSTOMER_JSON.serializer()
-        );
+        // customerInputTopic = driver.createInputTopic(
+        //         Streams.TOPIC_DATA_DEMO_CUSTOMERS,
+        //         Serdes.String().serializer(),
+        //         Streams.SERDE_CUSTOMER_JSON.serializer()
+        // );
 
         addressInputTopic = driver.createInputTopic(
                 OutOfStateSales.INPUT_TOPIC_ADDRESS,
@@ -79,16 +79,16 @@ class OutOfStateSalesTest {
         outputTopic = driver.createOutputTopic(
                 OutOfStateSales.OUTPUT_TOPIC,
                 Serdes.String().deserializer(),
-                OutOfStateSales.COUNTER_MAP_JSON_SERDE.deserializer()
+                OutOfStateSales.OUT_OF_STATE_JSON_SERDE.deserializer()
         );
     }
 
-    @AfterEach
-    public void cleanup() { 
-        if (driver != null) {
-            driver.close();
-        }
-    }
+   @AfterEach
+   public void cleanup() {
+       if (driver != null) {
+           driver.close();
+       }
+   }
 
     @Test
     @DisplayName("Out of state sales by venue")
