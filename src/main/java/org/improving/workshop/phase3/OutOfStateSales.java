@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.StreamsBuilder;
@@ -33,14 +34,14 @@ import org.improving.workshop.Streams;
 @Slf4j
 public class OutOfStateSales {
     // Reference TOPIC_DATA_DEMO_* properties in Streams
-    public static final String INPUT_TOPIC_TICKET = "data-demo-ticket";
-    public static final String INPUT_TOPIC_ADDRESS = "data-demo-address";
-    public static final String INPUT_TOPIC_EVENT = "data-demo-event";
-    public static final String INPUT_TOPIC_VENUE = "data-demo-venue";
+    public static final String INPUT_TOPIC_TICKET = TOPIC_DATA_DEMO_TICKETS;
+    public static final String INPUT_TOPIC_ADDRESS = TOPIC_DATA_DEMO_ADDRESSES;
+    public static final String INPUT_TOPIC_EVENT = TOPIC_DATA_DEMO_EVENTS;
+    public static final String INPUT_TOPIC_VENUE = TOPIC_DATA_DEMO_VENUES;
 
-    public static final JsonSerde<Address> SERDE_ADDRESS_JSON = new JsonSerde<>(Address.class);
-    public static final JsonSerde<Event> SERDE_EVENT_JSON = new JsonSerde<>(Event.class);
-    public static final JsonSerde<Venue> SERDE_VENUE_JSON = new JsonSerde<>(Venue.class);
+    // public static final JsonSerde<Address> SERDE_ADDRESS_JSON = new JsonSerde<>(Address.class);
+    // public static final JsonSerde<Event> SERDE_EVENT_JSON = new JsonSerde<>(Event.class);
+    // public static final JsonSerde<Venue> SERDE_VENUE_JSON = new JsonSerde<>(Venue.class);
     public static final JsonSerde<TicketWithCustomerAndVenueAndState> TICKET_CUSTOMER_JSON_SERDE = new JsonSerde<>(TicketWithCustomerAndVenueAndState.class);
 
 
@@ -103,11 +104,11 @@ public class OutOfStateSales {
                     (addressId, venue, address) -> new VenueWithState(venue, address)
                 )
                 .peek((venueId, venueWithState) -> log.info("Venue ID: {} with Venue With State: {}", venueId, venueWithState))
-                .<String>selectKey((addressId, venueWithState) -> venueWithState.venue().venueid(), Named.as("rekey-by-venueid"))
+                .<String>selectKey((addressId, venueWithState) -> venueWithState.venue.id(), Named.as("rekey-by-venueid"))
                 .toTable(Materialized.as("venue-with-state-table"));
         
         builder
-            .stream(TOPIC_DATA_DEMO_TICKETS, Consumed.with(Serdes.String(), SERDE_TICKET_JSON))
+            .stream(INPUT_TOPIC_TICKET, Consumed.with(Serdes.String(), SERDE_TICKET_JSON))
             .peek((ticketId, ticketRequest) -> log.info("Ticket Requested: {}", ticketRequest))
             // rekey by customerid so we can join against the address ktable
             .<String>selectKey((ticketId, ticketRequest) -> ticketRequest.customerid(), Named.as("rekey-by-customerid"))
@@ -137,7 +138,7 @@ public class OutOfStateSales {
 
                 //Aggregate customer with out of state ticket sales
                 (String venueId, TicketWithCustomerAndVenueAndState ticketWithCustomerAndVenueAndState, SortedCounterMap outOfStateSales) -> {
-                    String venueState = ticketWithCustomerAndVenueAndState.venueWithState.address().state();
+                    String venueState = ticketWithCustomerAndVenueAndState.venueWithState.address.state();
                     String customerState = ticketWithCustomerAndVenueAndState.ticketWithCustomerAndVenue.ticketWithCustomerAddress.address().state();
                     if (!venueState.equals(customerState)) {
                         outOfStateSales.incrementCount(venueId);
@@ -191,34 +192,21 @@ public class OutOfStateSales {
     }
 
     @Data
+    @NoArgsConstructor
     @AllArgsConstructor
     public static class VenueWithState {
-        private Venue venue;
-        private Address address;
+        public Venue venue;
+        public Address address;
 
-        public Venue venue() {
-            return venue;
-        }
+        // public Venue venue() {
+        //     return venue;
+        // }
 
-        public Address address() {
-            return address;
-        }
+        // public Address address() {
+        //     return address;
+        // }
     }
 
-    @Data
-    @AllArgsConstructor
-    public static class Venue {
-        private String venueid;
-        private String addressid;
-
-        public String venueid() {
-            return venueid;
-        }
-
-        public String addressid() {
-            return addressid;
-        }
-    }
 
     @Data
     @AllArgsConstructor
@@ -227,24 +215,4 @@ public class OutOfStateSales {
         private VenueWithState venueWithState;
     }
 
-    @Data
-    @AllArgsConstructor
-    public static class Ticket {
-        private String ticketid;
-        private String eventid;
-        private String venueid;
-        private String customerid;
-
-        public String venueid() {
-            return venueid;
-        }
-
-        public String eventid() {
-            return eventid;
-        }
-
-        public String customerid() {
-            return customerid;
-        }
-    }
 }

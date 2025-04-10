@@ -124,6 +124,5 @@ class OutOfStateSalesTest {
         // ASSERT
         var outputRecords = outputTopic.readRecordsToList();
         assertEquals(1, outputRecords.size());
-
     }
 }
