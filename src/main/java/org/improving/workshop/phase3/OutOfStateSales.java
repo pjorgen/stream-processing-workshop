@@ -36,6 +36,12 @@ public class OutOfStateSales {
     public static final JsonSerde<TicketWithCustomerAndVenueAndState> TICKET_CUSTOMER_JSON_SERDE = new JsonSerde<>(TicketWithCustomerAndVenueAndState.class);
 
 
+    //tjl  - these arent needed in this file but are need to access from the test
+    public static final String EVENT_KTABLE_TOPIC = "kafka-workshop-events-table";
+    public static final JsonSerde<Event> EVENT_JSON_SERDE = new JsonSerde<>(Event.class);
+    public static final String ADDRESS_KTABLE_TOPIC = "kafka-workshop-addresses-table";
+    public static final JsonSerde<Address> ADDRESS_JSON_SERDE = new JsonSerde<>(Address.class);
+
     // MUST BE PREFIXED WITH "kafka-workshop-"
     public static final String OUTPUT_TOPIC = "kafka-workshop-out-of-state-sales-ratio";
 
@@ -76,6 +82,8 @@ public class OutOfStateSales {
                                 .withValueSerde(Streams.SERDE_EVENT_JSON)
 
                 );
+                // tjl - need to add this to test this Ktable
+                eventsTable.toStream().to(EVENT_KTABLE_TOPIC, Produced.with(Serdes.String(), EVENT_JSON_SERDE));
 
         KTable<String, Address> addressTable = builder
                 .table(
@@ -86,6 +94,9 @@ public class OutOfStateSales {
                                 .withValueSerde(Streams.SERDE_ADDRESS_JSON)
 
                 );
+
+        //tjl
+        addressTable.toStream().to(ADDRESS_KTABLE_TOPIC, Produced.with(Serdes.String(), ADDRESS_JSON_SERDE));
 
         KTable<String, VenueWithState> venueWithStateTable = builder
                 .stream(INPUT_TOPIC_VENUE, Consumed.with(Serdes.String(), SERDE_VENUE_JSON))

@@ -20,12 +20,14 @@ import org.msse.demo.mockdata.music.ticket.Ticket;
 import org.msse.demo.mockdata.music.venue.Venue;
 import org.springframework.kafka.support.serializer.JsonSerde;
 
-import java.util.UUID;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class OutOfStateSalesTest {
     private TopologyTestDriver driver;
+
+    // tjl
+    private TestOutputTopic<String, Event> eventKTableOutputTopic;
+    private TestOutputTopic<String, Address> addressKTableOutputTopic;
 
     private TestInputTopic<String, Ticket> ticketInputTopic;
     private TestInputTopic<String, Address> addressInputTopic;
@@ -72,6 +74,19 @@ class OutOfStateSalesTest {
                 new JsonSerde<>(Venue.class).serializer()
         );
 
+        //tjl
+        eventKTableOutputTopic = driver.createOutputTopic(
+                OutOfStateSales.EVENT_KTABLE_TOPIC,
+                Serdes.String().deserializer(),
+                OutOfStateSales.EVENT_JSON_SERDE.deserializer()
+        );
+
+        addressKTableOutputTopic = driver.createOutputTopic(
+                OutOfStateSales.ADDRESS_KTABLE_TOPIC,
+                Serdes.String().deserializer(),
+                OutOfStateSales.ADDRESS_JSON_SERDE.deserializer()
+        );
+
         outputTopic = driver.createOutputTopic(
                 OutOfStateSales.OUTPUT_TOPIC,
                 Serdes.String().deserializer(),
@@ -87,38 +102,51 @@ class OutOfStateSalesTest {
     }
 
     @Test
-    @DisplayName("Out of state sales by venue")
-    public void outOfStateSalesByVenue() {
+    @DisplayName("Test Event KTable")
+    public void testEventKTable() {
         // ARRANGE
         String eventId = "event-1";
+        String artistId = "artist-1";
         String venueId = "venue-1";
-        String customerId = "customer-1";
-        String addressId1 = "address-1";
-        String addressId2 = "address-2";
-
+        int venueCap = 500;
 
         // ACT
-        Event event = new Event(eventId, "artist-1", venueId, 5, "today");
+        Event event = DataFaker.EVENTS.generate(eventId, artistId, venueId, venueCap);
         eventInputTopic.pipeInput(eventId, event);
 
-        Address address1 = new Address(
-                addressId1, customerId, "cd", "HOME", "111 1st St", "Apt 2",
-                "Madison", "WI", "55555", "1234", "USA", 0.0, 0.0);
-        addressInputTopic.pipeInput(addressId1, address1);
+        // ASSERT
+        var outputRecords = eventKTableOutputTopic.readRecordsToList();
+        assertEquals(1, outputRecords.size());
+        assertEquals(eventId, outputRecords.get(0).getKey());
+        assertEquals(artistId, outputRecords.get(0).getValue().artistid());
+        assertEquals(venueId, outputRecords.get(0).getValue().venueid());
+    }
 
-        Address address2 = new Address(
-                addressId2, "cust-678", "cd", "BUSINESS", "123 31st St", " ",
-                "Minneapolis", "MN", "55414", "1234", "USA", 0.0, 0.0);
-        addressInputTopic.pipeInput(addressId2, address2);
+    @Test
+    @DisplayName("Test Address KTable")
+    public void testAddressKTable() {
+        // ARRANGE
+        String addressId = "address-test-1";
+        String customerId = "customer-test-1";
 
-        Venue venue = new Venue(venueId, "Test Venue", addressId2, 500);
-        venueInputTopic.pipeInput(venueId, venue);
+        // ACT
+        // Generate the address with DataFaker
+        Address address = DataFaker.ADDRESSES.generateCustomerAddress(customerId);
 
-        Ticket ticket = DataFaker.TICKETS.generate(customerId, eventId);
-        ticketInputTopic.pipeInput(UUID.randomUUID().toString(), ticket);
+        // Get the actual values from the generated address
+        String actualCustomerId = address.customerid();
+        String actualState = address.state();
+
+        // Pipe it to the input topic
+        addressInputTopic.pipeInput(addressId, address);
 
         // ASSERT
-        var outputRecords = outputTopic.readRecordsToList();
+        var outputRecords = addressKTableOutputTopic.readRecordsToList();
         assertEquals(1, outputRecords.size());
+
+        // Check that the output matches using the actual data
+        assertEquals(actualCustomerId, outputRecords.get(0).getValue().customerid());
+        assertEquals(actualState, outputRecords.get(0).getValue().state());
     }
+
 }
