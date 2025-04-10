@@ -118,6 +118,10 @@ public class OutOfStateSales {
                 .<String>selectKey((addressId, venueWithState) -> venueWithState.venue.id(), Named.as("rekey-by-venueid"))
                         .toTable(Materialized.as("venue-with-state-table"));
 
+        KTable<String, Address> customerAddressTable = addressTable
+                .toStream()
+                .<String>selectKey((addressId, address) -> address.customerid(), Named.as("rekey-by-customerid-from-address-table"))
+                .toTable(Materialized.as("customer-address-table"));
         
         builder
             .stream(INPUT_TOPIC_TICKET, Consumed.with(Serdes.String(), SERDE_TICKET_JSON))
@@ -125,7 +129,7 @@ public class OutOfStateSales {
             // rekey by customerid so we can join against the address ktable
             .<String>selectKey((ticketId, ticketRequest) -> ticketRequest.customerid(), Named.as("rekey-by-customerid"))
             .<Address, TicketWithCustomerAddress>join(
-                addressTable,
+                customerAddressTable,
                 (customerId, ticket, address) -> new TicketWithCustomerAddress(ticket, address)
             )
             .peek((customerId, ticketWithCustomerAddress) -> log.info("Customer ID: {} with Ticket With Customer Address: {}", customerId, ticketWithCustomerAddress))
