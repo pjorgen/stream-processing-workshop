@@ -188,6 +188,7 @@ class OutOfStateSalesTest {
         Event event = new Event(eventId, "artist-1", venueId, 5, "today");
         eventInputTopic.pipeInput(eventId, event);
 
+        //Customer Address is in state
         Address address1 = new Address(
             addressId1, customerId, "cd", "HOME", "123 17th St", " ",
             "Minneapolis", "MN", "55444", "1234", "USA", 0.0, 0.0);
@@ -261,16 +262,16 @@ class OutOfStateSalesTest {
         Venue venue = new Venue(venueId, addressId5, "Cali Venue", 5000);
         venueInputTopic.pipeInput(venueId, venue);
 
-        Ticket ticket = DataFaker.TICKETS.generate(customerId, eventId);
+        Ticket ticket = DataFaker.TICKETS.generate(customerId, eventId); //In state ticket
         ticketInputTopic.pipeInput(UUID.randomUUID().toString(), ticket);
 
-        Ticket ticket2 = DataFaker.TICKETS.generate(customerId2, eventId);
+        Ticket ticket2 = DataFaker.TICKETS.generate(customerId2, eventId); //Out of state ticket
         ticketInputTopic.pipeInput(UUID.randomUUID().toString(), ticket2);
 
-        Ticket ticket3 = DataFaker.TICKETS.generate(customerId3, eventId);
+        Ticket ticket3 = DataFaker.TICKETS.generate(customerId3, eventId); //Out of state ticket
         ticketInputTopic.pipeInput(UUID.randomUUID().toString(), ticket3);
 
-        Ticket ticket4 = DataFaker.TICKETS.generate(customerId4, eventId);
+        Ticket ticket4 = DataFaker.TICKETS.generate(customerId4, eventId); //In state ticket
         ticketInputTopic.pipeInput(UUID.randomUUID().toString(), ticket4);
 
 
@@ -279,6 +280,7 @@ class OutOfStateSalesTest {
         assertEquals(0, outputRecords.get(0).value().getOutOfStateTicket());
         assertEquals(1, outputRecords.get(1).value().getOutOfStateTicket());
         assertEquals(2, outputRecords.get(2).value().getOutOfStateTicket());
+        assertEquals(2, outputRecords.get(3).value().getOutOfStateTicket());
     }
 
     @Test
@@ -287,9 +289,9 @@ class OutOfStateSalesTest {
         // ARRANGE
         String eventId = "event-77";
         String eventId2 = "event-88";
+
         String venueId = "venue-33";
         String venueId2 = "venue-44";
-
 
         String customerId = "customer-1";
         String customerId2 = "customer-2";
@@ -347,16 +349,16 @@ class OutOfStateSalesTest {
         Venue venue2 = new Venue(venueId2, addressId6, "NY Venue", 5000);
         venueInputTopic.pipeInput(venueId2, venue2);
 
-        Ticket ticket = DataFaker.TICKETS.generate(customerId, eventId2);
+        Ticket ticket = DataFaker.TICKETS.generate(customerId, eventId2); //Out of state ticket for venue 2
         ticketInputTopic.pipeInput(UUID.randomUUID().toString(), ticket);
 
-        Ticket ticket2 = DataFaker.TICKETS.generate(customerId2, eventId);
+        Ticket ticket2 = DataFaker.TICKETS.generate(customerId2, eventId); //Out of state ticket for venue 1
         ticketInputTopic.pipeInput(UUID.randomUUID().toString(), ticket2);
 
-        Ticket ticket3 = DataFaker.TICKETS.generate(customerId3, eventId);
+        Ticket ticket3 = DataFaker.TICKETS.generate(customerId3, eventId); //Out of state ticket for venue 1
         ticketInputTopic.pipeInput(UUID.randomUUID().toString(), ticket3);
 
-        Ticket ticket4 = DataFaker.TICKETS.generate(customerId4, eventId);
+        Ticket ticket4 = DataFaker.TICKETS.generate(customerId4, eventId); //In state ticket for venue 1
         ticketInputTopic.pipeInput(UUID.randomUUID().toString(), ticket4);
 
 
@@ -372,15 +374,21 @@ class OutOfStateSalesTest {
     @DisplayName("Test out of state ticket ratio")
     public void testOutOfStateTicketRatio() {
         // ARRANGE
-        // ARRANGE
         String eventId = "event-1";
+
         String venueId = "venue-1";
+
         String customerId1 = "customer-1";
         String customerId2 = "customer-2";
+        String customerId3 = "customer-3";
+        String customerId4 = "customer-4";
+
         String addressId1 = "address-1";
-        String addressId2 = "address-2";
+        String addressId2 = "address-2"; //Venue Address
         String addressId3 = "address-3";
-        
+        String addressId4 = "address-4";
+        String addressId5 = "address-5";
+
         // ACT
         Event event = new Event(eventId, "artist-1", venueId, 5, "today");
         eventInputTopic.pipeInput(eventId, event);
@@ -400,19 +408,38 @@ class OutOfStateSalesTest {
             "St. Paul", "MN", "55414", "1234", "USA", 40.7128, -74.0060);
         addressInputTopic.pipeInput(addressId3, address3);
 
+        Address address4 = new Address(
+            addressId4, customerId3, "TD", "HOME", "444 4th St", "Apt 5",
+            "St. Paul", "MN", "55414", "1234", "USA", 40.7128, -74.0060);
+        addressInputTopic.pipeInput(addressId4, address4);
+
+        Address address5 = new Address(
+            addressId5, customerId4, "TD", "HOME", "555 5th St", "",
+            "St. Paul", "MN", "55414", "1234", "USA", 40.7128, -74.0060);
+        addressInputTopic.pipeInput(addressId5, address5);
+
         Venue venue = new Venue(venueId, addressId2, "Test Venue", 500);
         venueInputTopic.pipeInput(venueId, venue);
 
         Ticket ticket = DataFaker.TICKETS.generate(customerId1, eventId);
-        ticketInputTopic.pipeInput(UUID.randomUUID().toString(), ticket);
+        ticketInputTopic.pipeInput(UUID.randomUUID().toString(), ticket); //Out of state ticket
 
         Ticket ticket2 = DataFaker.TICKETS.generate(customerId2, eventId);
-        ticketInputTopic.pipeInput(UUID.randomUUID().toString(), ticket2);
+        ticketInputTopic.pipeInput(UUID.randomUUID().toString(), ticket2); //In state ticket
+
+        Ticket ticket3 = DataFaker.TICKETS.generate(customerId3, eventId);
+        ticketInputTopic.pipeInput(UUID.randomUUID().toString(), ticket3); //In state ticket
+
+        Ticket ticket4 = DataFaker.TICKETS.generate(customerId4, eventId);
+        ticketInputTopic.pipeInput(UUID.randomUUID().toString(), ticket4); //In state ticket
 
         // ASSERT
         var outputRecords = outputTopic.readRecordsToList();
+        //Out of state ticket ratio is should decline as more in state tickets are sold.
         assertEquals(1, outputRecords.get(0).value().getOutOfStateTicketRatio());
         assertEquals(0.5, outputRecords.get(1).value().getOutOfStateTicketRatio());
+        assertEquals(0.33, outputRecords.get(2).value().getOutOfStateTicketRatio());
+        assertEquals(0.25, outputRecords.get(3).value().getOutOfStateTicketRatio());
     }
 
 

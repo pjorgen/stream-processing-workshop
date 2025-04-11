@@ -227,9 +227,9 @@ public class OutOfStateSales {
     @AllArgsConstructor
     public static class OutOfStateTicketSales {
         private boolean initialized;
-        private Venue venue;
-        private double outOfStateTicket;
-        private double totalTicket;
+        private Venue venue; //Venue tied to the out of state ticket sales
+        private double outOfStateTicket; //Number of out of state tickets sold
+        private double totalTicket; //Total number of tickets sold
 
         public OutOfStateTicketSales() {
             initialized = false;
@@ -252,7 +252,8 @@ public class OutOfStateSales {
         }
 
         public double getOutOfStateTicketRatio() {
-            return outOfStateTicket / totalTicket;
+            double ratio = outOfStateTicket / totalTicket; //Ratio of out of state tickets to total tickets
+            return Math.round(ratio * 100.0) / 100.0; //Round to 2 decimal places
         }
     }
 }
