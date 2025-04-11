@@ -33,6 +33,7 @@ import static java.util.stream.Collectors.toMap;
 import static org.apache.kafka.streams.state.Stores.persistentKeyValueStore;
 import static org.improving.workshop.Streams.*;
 import org.improving.workshop.Streams;
+import org.improving.workshop.Streams;
 
 @Slf4j
 public class OutOfStateSales {
