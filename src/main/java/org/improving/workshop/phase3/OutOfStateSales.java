@@ -166,7 +166,7 @@ public class OutOfStateSales {
                     if (!outOfStateTicketSales.initialized) {
                         outOfStateTicketSales.initialize(ticketWithCustomerAndVenueAndState.venueWithState.venue);
                     }
-                    
+                    outOfStateTicketSales.incrementTotalTicket();
                     String venueState = ticketWithCustomerAndVenueAndState.venueWithState.address.state();
                     String customerState = ticketWithCustomerAndVenueAndState.ticketWithCustomerAndVenue.ticketWithCustomerAddress.address.state();
                     if (!venueState.equals(customerState)) {
@@ -229,6 +229,7 @@ public class OutOfStateSales {
         private boolean initialized;
         private Venue venue;
         private double outOfStateTicket;
+        private double totalTicket;
 
         public OutOfStateTicketSales() {
             initialized = false;
@@ -242,8 +243,16 @@ public class OutOfStateSales {
             this.outOfStateTicket++;
         }
 
+        public void incrementTotalTicket() {
+            this.totalTicket++;
+        }
+
         public double getOutOfStateTicket() {
             return outOfStateTicket;
+        }
+
+        public double getOutOfStateTicketRatio() {
+            return outOfStateTicket / totalTicket;
         }
     }
 }
