@@ -189,9 +189,10 @@ class TopSellingGenreByVenueTest {
         String artistId2 = "artist-2";
         String artistId3 = "artist-3";
 
-        Artist artist1 = ARTISTS.generate(artistId1);
-        Artist artist2 = ARTISTS.generate(artistId2);
-        Artist artist3 = ARTISTS.generate(artistId3);
+        // Since genres are chosen randomly by ARTISTS.generate(), manually create the artists
+        Artist artist1 = new Artist(artistId1, "Taylor Swift", "Folk");
+        Artist artist2 = new Artist(artistId2, "Snow Patrol", "Pop");
+        Artist artist3 = new Artist(artistId3, "Glass Animals", "Electronic");
 
         artistInputTopic.pipeInput(artistId1, artist1);
         artistInputTopic.pipeInput(artistId2, artist2);
